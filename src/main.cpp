@@ -93,45 +93,32 @@ void loop(){
 
 	timeSinceStart=millis();
 	
-	//BSONObject bo =bob.obj();
-	//int a =  bo.len();
-	int packetSize = CAN.parsePacket();
+	BSONObject bo =bob.obj();
+	int a =  bo.len();
+	int parsedPacketSize = CAN.parsePacket();
 	int _id= CAN.packetId(); 
 
-	if (packetSize || _id != -1) {
-		Serial.print("Received ");
-
-		if (CAN.packetExtended()) {
-			Serial.print("extended ");
-		}
-
-		if (CAN.packetRtr()) {
-			// Remote transmission request, packet contains no data
-			Serial.print("RTR ");
-		}
-		if (CAN.packetRtr()) {
-			Serial.print(" and requested length ");
-			Serial.println(CAN.packetDlc());
-		} else {
-			Serial.print(" and length ");
-			Serial.println(packetSize);
-
+	int packetSize = CAN.packetDlc();
+	char msg[8];
+	if (_id != -1) {
+			size_t i;
+			for (i = 0; i < packetSize; i++){
+				msg[i]=CAN.read();
+			}
+			
 			// only print packet data for non-RTR packets
-			while (CAN.available()) {
-				
-				Serial.print((char)CAN.read());
-			}	
+			
 			switch (_id){
 					#ifdef __LART_T24__
 						case 0x21:
-							Serial.println("BOA");
+							rpm=msg[1];
+							Serial.println(rpm);
 							break;
 					#endif		
 			}
-			Serial.println(rpm);
-		}
+			
 	}
-	/*
+	
 	
 	millist=millis();
 	if(millist-milliss>=period){
@@ -163,7 +150,7 @@ void loop(){
 		Serial.print(bsonW);
 		Serial.write(bo.rawData(), a);
 		milliss=millist;
-	}	*/
+	}	
 
 		
 }
