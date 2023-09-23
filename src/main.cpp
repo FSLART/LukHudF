@@ -47,8 +47,7 @@ typedef union  {
   float decodedValue;
 }EncodingUnion;
 
-EncodingUnion g_OilPressure; 
-
+EncodingUnion g_OilPressure;
 String bsonW="\xFF\xFF\xFF\xFF";
 int period=500;
 BSONObjBuilder bob;
@@ -83,7 +82,10 @@ void setup() {
     bob.append(BSON_LAPCOUNT, (int16_t)0);
     bob.append(BSON_LAPTIME,(int32_t)timeSinceStart);
   #endif
-	
+	if (!CAN.begin(1000E3)) {
+		Serial.println("Starting CAN failed!");
+		while (1);
+	}
 	delay(100);
 }
 void loop(){
@@ -91,34 +93,46 @@ void loop(){
 
 	timeSinceStart=millis();
 	
-	BSONObject bo =bob.obj();
-	int a =  bo.len();
-
+	//BSONObject bo =bob.obj();
+	//int a =  bo.len();
 	int packetSize = CAN.parsePacket();
-	auto _id= CAN.packetId();
+	int _id= CAN.packetId(); 
 
 	if (packetSize || _id != -1) {
-		uint8_t k[9];
-		auto f =0;
-		while (CAN.available()) {
-			k[f++]=CAN.read();
-			Serial.print(k[f]);
-			
-		}	
-		switch (f){
-				#ifdef __LART_T24__
-					case 0x21:
-						rpm = k[7]|k[6];
-			
-						
-					break;
-				#endif
-			
+		Serial.print("Received ");
+
+		if (CAN.packetExtended()) {
+			Serial.print("extended ");
+		}
+
+		if (CAN.packetRtr()) {
+			// Remote transmission request, packet contains no data
+			Serial.print("RTR ");
+		}
+		if (CAN.packetRtr()) {
+			Serial.print(" and requested length ");
+			Serial.println(CAN.packetDlc());
+		} else {
+			Serial.print(" and length ");
+			Serial.println(packetSize);
+
+			// only print packet data for non-RTR packets
+			while (CAN.available()) {
 				
+				Serial.print((char)CAN.read());
+			}	
+			switch (_id){
+					#ifdef __LART_T24__
+						case 0x21:
+							Serial.println("BOA");
+							break;
+					#endif		
 			}
+			Serial.println(rpm);
+		}
 	}
-
-
+	/*
+	
 	millist=millis();
 	if(millist-milliss>=period){
 	
@@ -149,7 +163,7 @@ void loop(){
 		Serial.print(bsonW);
 		Serial.write(bo.rawData(), a);
 		milliss=millist;
-	}	
+	}	*/
 
 		
 }
