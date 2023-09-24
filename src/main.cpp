@@ -7,6 +7,8 @@
 #include <IEEE754tools.h>
 #include <ardubsonObjBuilder.h>
 #include <ardubsonElement.h>
+#include <SoftwareSerial.h>
+
 #include <SPI.h>
 #include <CAN.h>
 
@@ -16,6 +18,8 @@
 #define BSON_VEHICLESPEED "vel"
 #define BSON_ENGINETEMPERATURE "eng_t"
 #define BSON_BATTERYVOLTAGE "bat_v"
+#define PB1_TX_13 9
+#define PB0_RX_12 8
 #define __LART_T24__
 
 #ifdef __LART_T14__
@@ -46,7 +50,8 @@ typedef union  {
   int32_t encodedValue;
   float decodedValue;
 }EncodingUnion;
-
+//Todo
+SoftwareSerial mySerial(PB1_TX_13, PB0_RX_12);
 EncodingUnion g_OilPressure;
 String bsonW="\xFF\xFF\xFF\xFF";
 int period=500;
@@ -56,8 +61,10 @@ int32_t timeSinceStart = 0;
 void setup() {
 	// Setup serial port
 	//8 bit, Odd parity and 1 bit for stop
-	  Serial.begin(115200,SERIAL_8O1);
-	
+	Serial.begin(115200,SERIAL_8O1);
+	mySerial.begin(115200);
+	//Serial begin on hardware TX and RX for an arduino nano
+
     
 	  //delay(2000);
     bob.append(BSON_RPM, (int32_t)0);
@@ -82,6 +89,7 @@ void setup() {
     bob.append(BSON_LAPCOUNT, (int16_t)0);
     bob.append(BSON_LAPTIME,(int32_t)timeSinceStart);
   #endif
+	//while(1);
 	if (!CAN.begin(1000E3)) {
 		Serial.println("Starting CAN failed!");
 		while (1);
@@ -93,8 +101,8 @@ void loop(){
 
 	timeSinceStart=millis();
 	
-	BSONObject bo =bob.obj();
-	int a =  bo.len();
+	/*BSONObject bo =bob.obj();
+	int a =  bo.len();*/
 	int parsedPacketSize = CAN.parsePacket();
 	int _id= CAN.packetId(); 
 
@@ -109,12 +117,12 @@ void loop(){
 			// only print packet data for non-RTR packets
 			
 			switch (_id){
-					#ifdef __LART_T24__
-						case 0x21:
-							rpm=msg[1];
-							Serial.println(rpm);
-							break;
-					#endif		
+				#ifdef __LART_T24__
+					case 0x21:
+						rpm=msg[1];
+						Serial.println(rpm);
+						break;
+				#endif		
 			}
 			
 	}
@@ -147,8 +155,8 @@ void loop(){
 	#endif
 		
 	  
-		Serial.print(bsonW);
-		Serial.write(bo.rawData(), a);
+		mySerial.print(bsonW);
+		mySerial.write(bo.rawData(), a);
 		milliss=millist;
 	}	
 
