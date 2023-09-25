@@ -61,13 +61,14 @@ String bsonW="\xFF\xFF\xFF\xFF";
 
 
 
-int main(void) {
+void setup (void) {
 	
 	uint8_t buffer[SIZE_OF_BSON];
 	BSONPP bson(buffer, sizeof(buffer));
 	// Setup serial port
 	//8 bit, Odd parity and 1 bit for stop
 	Serial.begin(115200);
+	
 	mySerial.begin(115200);
 	//Serial begin on hardware TX and RX for an arduino nano
 	if (!CAN.begin(1000E3)) {
@@ -138,7 +139,6 @@ int main(void) {
 
 		}	
 	}
-	return 0;
 }
 
 	
