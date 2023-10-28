@@ -2,11 +2,11 @@
 #include <SPI.h>
 #include <CAN.h>
 #include <BSONPP.h>
-#define __LART_T24__
+#include "CAN_db.h"
+//#define __LART_T24__
 #define PB1_TX_13 9
 #define PB0_RX_12 8
 
-#define CAN_RPM 0x21 
 
 
 #define BSON_RPM "rpm"
@@ -29,12 +29,6 @@
 #endif
 
 #ifdef __LART_T24__
-  #define GPIO_SERIAL_PARITY GPIO_SERIAL_PARITY_ODD
-  #define GPIO_SERIAL_STOP_BITS 1
-
-  #define CAN_MOTOR_TEMPERATURE 0x21
-  #define CAN_INVERTER_TEMP 0x21
-  #define CAN_INSTANT_POWER 0x20
 
   #define BSON_SOC "soc"
   #define BSON_BATTERYTEMPERATURE "bat_t"
@@ -50,7 +44,7 @@
   
 #endif 
 
-SoftwareSerial mySerial(PB1_TX_13, PB0_RX_12);
+SoftwareSerial mySerial(PB0_RX_12,PB1_TX_13);
 
 typedef union  {
   int32_t encodedValue;
@@ -59,13 +53,15 @@ typedef union  {
 uint32_t _millis =0; 
 uint32_t _millis_target=0;
 uint32_t period=100;
-EncodingUnion g_OilPressure;
 String bsonW="\xFF\xFF\xFF\xFF";
 
 
 
 void setup (void) {
-	
+	uint16_t rpm=0;
+	uint16_t motor_temperature=0;
+	uint16_t inverter_temperature=0;
+
 	uint8_t buffer[SIZE_OF_BSON];
 	BSONPP bson(buffer, sizeof(buffer));
 	// Setup serial port
@@ -76,12 +72,10 @@ void setup (void) {
 	//Serial begin on hardware TX and RX for an arduino nano
 	if (!CAN.begin(1000E3)) {
 		Serial.println("Starting CAN failed!");
-		while (1);
+		//while (1);
 	}
 	while (1){
 		_millis=millis();
-		int32_t rpm; 
-
 		
 		int parsedPacketSize = CAN.parsePacket();
 		//TODO check if this is the same as packetSize
@@ -91,18 +85,21 @@ void setup (void) {
 		int packetSize = CAN.packetDlc();
 		char msg[8];
 		if (_id != -1) {
-				size_t i;
-				for (i = 0; i < (size_t)packetSize; i++){
+				//Read msg in one swoop
+				memcpy(msg, CAN.peek(), packetSize);
+				
+				/*for (i = 0; i < (size_t)packetSize; i++){
 					msg[i]=CAN.read();
-				}
+				}*/
 				
 				// only print packet data for non-RTR packets
 				
 				switch (_id){
 					#ifdef __LART_T24__
-						case 0x21:
-							rpm=msg[1];
-							Serial.println(rpm);
+						case CAN_TEMPS_DRIVE:
+							rpm=MAP_RPM(msg);
+							motor_temperature=MAP_MOTOR_TEMPERATURE(msg);
+							inverter_temperature=MAP_INVERTER_TEMPERATURE(msg);
 							break;
 					#endif		
 				}
@@ -112,6 +109,7 @@ void setup (void) {
 		
 		
 		if(_millis-_millis_target>=period){
+			bson.clear(); 
 			bson.append(BSON_RPM, (int32_t)rpm);
 			bson.append(BSON_BATTERYVOLTAGE, (int32_t)rpm); //float 
 			bson.append(BSON_ENGINETEMPERATURE, (int32_t) rpm);
