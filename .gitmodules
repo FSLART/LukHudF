@@ -1,3 +1,6 @@
 [submodule "lib/can"]
 	path = lib/can
 	url = https://github.com/Imeguras/MCP2515-Arduino-CAN
+[submodule "lib/software_serial"]
+	path = lib/software_serial
+	url = https://github.com/Imeguras/SoftwareSerial
