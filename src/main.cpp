@@ -58,9 +58,11 @@ String bsonW="\xFF\xFF\xFF\xFF";
 
 
 void setup (void) {
+	uint32_t power=0;
 	uint16_t rpm=0;
 	uint16_t motor_temperature=0;
 	uint16_t inverter_temperature=0;
+	uint16_t mean_battery_temperature=0;
 
 	uint8_t buffer[SIZE_OF_BSON];
 	BSONPP bson(buffer, sizeof(buffer));
@@ -82,26 +84,38 @@ void setup (void) {
 		(void) parsedPacketSize;
 		int _id= CAN.packetId(); 
 
-		int packetSize = CAN.packetDlc();
+		int  packetSize = CAN.packetDlc();
 		char msg[8];
 		if (_id != -1) {
 				//Read msg in one swoop
-				memcpy(msg, CAN.peek(), packetSize);
-				
-				/*for (i = 0; i < (size_t)packetSize; i++){
-					msg[i]=CAN.read();
-				}*/
+				//CAN.pop_read(msg, packetSize);
+				/*if(msg==nullptr){
+					mySerial.println("Error reading CAN packet");
+					continue;
+				}
+				*/
 				
 				// only print packet data for non-RTR packets
-				
+				for (int i = 0; i < (int)packetSize; i++){
+					msg[i]=CAN.read();
+				}
 				switch (_id){
-					#ifdef __LART_T24__
-						case CAN_TEMPS_DRIVE:
-							rpm=MAP_RPM(msg);
-							motor_temperature=MAP_MOTOR_TEMPERATURE(msg);
-							inverter_temperature=MAP_INVERTER_TEMPERATURE(msg);
+					
+					
+						/*case CAN_VCU_MODULUS_1:
+							power=MAP_CONSUMED_POWER(msg);
+							
 							break;
-					#endif		
+						case CAN_TCU_MODULUS_1:
+							mean_battery_temperature= MAP_PACK_MEAN_TEMPERATURE(msg);
+							break;*/
+						case 0x21:
+							rpm=msg[0];
+							//motor_temperature=MAP_MOTOR_TEMPERATURE(msg);
+							//inverter_temperature=MAP_INVERTER_TEMPERATURE(msg);
+							break;
+						
+						
 				}
 				
 		}
@@ -112,7 +126,7 @@ void setup (void) {
 			bson.clear(); 
 			bson.append(BSON_RPM, (int32_t)rpm);
 			bson.append(BSON_BATTERYVOLTAGE, (int32_t)rpm); //float 
-			bson.append(BSON_ENGINETEMPERATURE, (int32_t) rpm);
+			bson.append(BSON_ENGINETEMPERATURE, (int32_t) motor_temperature);
 			bson.append(BSON_VEHICLESPEED, (int32_t) rpm);
 			
 		#ifdef __LART_T14__
@@ -126,9 +140,9 @@ void setup (void) {
 		#endif
 		#ifdef __LART_T24__
 			bson.append(BSON_SOC, (int32_t)rpm); 
-			bson.append(BSON_BATTERYTEMPERATURE, (int32_t)rpm);
-			bson.append(BSON_INVERTERTEMPERATURE, (int32_t)rpm); 
-			bson.append(BSON_POWER, (int32_t)rpm);//int16_t
+			bson.append(BSON_BATTERYTEMPERATURE, (int32_t)mean_battery_temperature);
+			bson.append(BSON_INVERTERTEMPERATURE, (int32_t)inverter_temperature); 
+			bson.append(BSON_POWER, (int32_t)power);//int16_t
 			bson.append(BSON_LAPCOUNT , (int32_t)rpm);//int16_t
 			bson.append(BSON_LAPTIME,(int32_t)_millis);
 		#endif
