@@ -3,7 +3,7 @@
 #include <CAN.h>
 #include <BSONPP.h>
 #include "CAN_db.h"
-//#define __LART_T24__
+
 #define PB1_TX_13 9
 #define PB0_RX_12 8
 
@@ -85,37 +85,34 @@ void setup (void) {
 		int _id= CAN.packetId(); 
 
 		int  packetSize = CAN.packetDlc();
-		char msg[8];
+		uint8_t msg[8];
 		if (_id != -1) {
 				//Read msg in one swoop
 				//CAN.pop_read(msg, packetSize);
-				/*if(msg==nullptr){
-					mySerial.println("Error reading CAN packet");
+				if(msg==nullptr){
+					Serial.println("Error reading CAN packet");
 					continue;
 				}
-				*/
+				
 				
 				// only print packet data for non-RTR packets
 				for (int i = 0; i < (int)packetSize; i++){
 					msg[i]=CAN.read();
 				}
 				switch (_id){
-					
-					
-						/*case CAN_VCU_MODULUS_1:
-							power=MAP_CONSUMED_POWER(msg);
-							
+					#ifdef __LART_T24__ 
+						case CAN_VCU_MODULUS_1:
+							power = MAP_CONSUMED_POWER(msg);
+							break;	
+						case CAN_VCU_MODULUS_2:
+							rpm = MAP_RPM(msg);
+							motor_temperature = MAP_MOTOR_TEMPERATURE(msg);
+							inverter_temperature = MAP_INVERTER_TEMPERATURE(msg);
 							break;
 						case CAN_TCU_MODULUS_1:
-							mean_battery_temperature= MAP_PACK_MEAN_TEMPERATURE(msg);
-							break;*/
-						case 0x21:
-							rpm=msg[0];
-							//motor_temperature=MAP_MOTOR_TEMPERATURE(msg);
-							//inverter_temperature=MAP_INVERTER_TEMPERATURE(msg);
+							mean_battery_temperature=MAP_PACK_MEAN_TEMPERATURE(msg);
 							break;
-						
-						
+					#endif
 				}
 				
 		}
