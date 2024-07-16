@@ -1,6 +1,6 @@
-#include <SoftwareSerial.h>
+//#include <SoftwareSerial.h>
 #include <SPI.h>
-#include <CAN.h>
+//#include <CAN.h>
 #include <BSONPP.h>
 #include "CAN_db.h"
 
@@ -44,7 +44,7 @@
   
 #endif 
 
-SoftwareSerial mySerial(PB0_RX_12,PB1_TX_13);
+
 
 typedef union  {
   int32_t encodedValue;
@@ -53,8 +53,12 @@ typedef union  {
 uint32_t _millis =0; 
 uint32_t _millis_target=0;
 uint32_t period=100;
-String bsonW="\xFF\xFF\xFF\xFF";
+char *bsonW="\xFF\xFF\xFF\xFF";
 
+void loop()
+{
+
+}
 
 
 void setup (void) {
@@ -68,25 +72,25 @@ void setup (void) {
 	BSONPP bson(buffer, sizeof(buffer));
 	// Setup serial port
 	//8 bit, Odd parity and 1 bit for stop
-	Serial.begin(115200);
+	Serial1.begin(115200);
 	
-	mySerial.begin(115200);
+	
 	//Serial begin on hardware TX and RX for an arduino nano
-	if (!CAN.begin(1000E3)) {
+	/*if (!CAN.begin(1000E3)) {
 		Serial.println("Starting CAN failed!");
 		//while (1);
-	}
+	}*/
 	while (1){
 		_millis=millis();
 		
-		int parsedPacketSize = CAN.parsePacket();
+		//int parsedPacketSize = CAN.parsePacket();
 		//TODO check if this is the same as packetSize
-		(void) parsedPacketSize;
-		int _id= CAN.packetId(); 
+		//(void) parsedPacketSize;
+		//int _id= CAN.packetId(); 
 
-		int  packetSize = CAN.packetDlc();
-		uint8_t msg[8];
-		if (_id != -1) {
+		//int  packetSize = CAN.packetDlc();
+		//uint8_t msg[8];
+		/*if (_id != -1) {
 				//Read msg in one swoop
 				//CAN.pop_read(msg, packetSize);
 				if(msg==nullptr){
@@ -115,10 +119,20 @@ void setup (void) {
 					#endif
 				}
 				
+		}*/
+		
+		
+		motor_temperature ++;
+		if(motor_temperature >100)
+		{
+			motor_temperature = 0;
 		}
-		
-		
-		
+		rpm ++;
+		if(rpm >1000)
+		{
+			rpm = 0;
+		}
+
 		if(_millis-_millis_target>=period){
 			bson.clear(); 
 			bson.append(BSON_RPM, (int32_t)rpm);
@@ -145,8 +159,9 @@ void setup (void) {
 		#endif
 			
 		
-			mySerial.print(bsonW);
-			mySerial.write(bson.getBuffer(), bson.getSize());
+			
+			Serial1.write(bsonW);
+			Serial1.write(bson.getBuffer(), bson.getSize());
 			_millis_target=_millis;
 
 		}	
