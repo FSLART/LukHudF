@@ -1,9 +1,8 @@
-//#include <SoftwareSerial.h>
-#include <SPI.h>
-//#include <CAN.h>
+#include <Arduino.h>
+#include <ESP32_CAN.h>
 #include <BSONPP.h>
 #include "CAN_db.h"
-
+#include "Can-Header-Map/CAN_datadb.h"
 #define PB1_TX_13 9
 #define PB0_RX_12 8
 
@@ -57,16 +56,18 @@ char *bsonW="\xFF\xFF\xFF\xFF";
 
 void loop()
 {
-
+	
 }
-
+void read_TCU_temperature(uint8_t data[8]);
+TWAI_Interface CAN1(1000, 21, 22); // argument 1 - BaudRate,  argument 2 - CAN_TX PIN,  argument 3 - CAN_RX PIN
+uint16_t mean_battery_temperature=0;
 
 void setup (void) {
 	uint32_t power=0;
 	uint16_t rpm=0;
 	uint16_t motor_temperature=0;
 	uint16_t inverter_temperature=0;
-	uint16_t mean_battery_temperature=0;
+	
 
 	uint8_t buffer[SIZE_OF_BSON];
 	BSONPP bson(buffer, sizeof(buffer));
@@ -81,24 +82,38 @@ void setup (void) {
 		//while (1);
 	}*/
 	while (1){
+		uint8_t msg[8] = {0,0,0,0,0,0,0,0};
 		_millis=millis();
 		
 		//int parsedPacketSize = CAN.parsePacket();
 		//TODO check if this is the same as packetSize
 		//(void) parsedPacketSize;
-		//int _id= CAN.packetId(); 
 
-		//int  packetSize = CAN.packetDlc();
-		//uint8_t msg[8];
-		/*if (_id != -1) {
-				//Read msg in one swoop
-				//CAN.pop_read(msg, packetSize);
+		int _id= CAN1.RXpacketBegin(); 
+
+		int  packetSize = CAN1.RXgetDLC();
+		
+		if (_id != -1) {
+				for(int i = 0; i<= packetSize; i++){
+					msg[i] = CAN1.RXpacketRead(i);
+				}
+				
+				
 				if(msg==nullptr){
 					Serial.println("Error reading CAN packet");
 					continue;
 				}
+				switch (_id)
+				{
+				case CAN_TCU_MODULUS_1:
+					/* code */
+					break;
 				
-				
+				default:
+					continue;
+				}
+		}
+				/*
 				// only print packet data for non-RTR packets
 				for (int i = 0; i < (int)packetSize; i++){
 					msg[i]=CAN.read();
@@ -171,3 +186,6 @@ void setup (void) {
 	
 
 		
+void read_TCU_temperature(uint8_t data[8]){
+	mean_battery_temperature = MAP_PACK_MEAN_TEMPERATURE(data);
+}
