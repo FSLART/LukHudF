@@ -1,8 +1,13 @@
 #include <Arduino.h>
 #include <ESP32_CAN.h>
 #include <BSONPP.h>
-#include "CAN_db.h"
 #include "Can-Header-Map/CAN_datadb.h"
+#include <WiFi.h>
+#include <ESP2SOTA.h>
+#include <WebServer.h>
+
+
+
 #define PB1_TX_13 9
 #define PB0_RX_12 8
 
@@ -10,8 +15,8 @@
 
 #define BSON_RPM "rpm"
 #define BSON_VEHICLESPEED "vel"
-#define BSON_ENGINETEMPERATURE "eng_t"
-#define BSON_BATTERYVOLTAGE "bat_v"
+#define BSON_MOTORTEMPERATURE "mot_t"
+#define BSON_LV_BATTERYVOLTAGE "lv_bat_v"
 #define SIZE_OF_BSON 40
 
 
@@ -35,6 +40,8 @@
   #define BSON_POWER "pow"
   #define BSON_LAPCOUNT "lap_c"
   #define BSON_LAPTIME "lap_t"
+  #define BSON_INVERTERVoltage "inv_v"
+  #define BSON_HV_BATTERYVOLTAGE "hv_bat_v"
  
   #undef SIZE_OF_BSON
  
@@ -58,16 +65,21 @@ void loop()
 {
 	
 }
-void read_TCU_temperature(uint8_t data[8]);
+
 TWAI_Interface CAN1(1000, 21, 22); // argument 1 - BaudRate,  argument 2 - CAN_TX PIN,  argument 3 - CAN_RX PIN
-uint16_t mean_battery_temperature=0;
+
+
+const char* ssid = "Volante";
+const char* password = "volante2024";
+WebServer server(80);
 
 void setup (void) {
 	uint32_t power=0;
 	uint16_t rpm=0;
 	uint16_t motor_temperature=0;
 	uint16_t inverter_temperature=0;
-	
+	uint16_t mean_battery_temperature=0;
+	uint16_t inverter_voltage = 0;
 
 	uint8_t buffer[SIZE_OF_BSON];
 	BSONPP bson(buffer, sizeof(buffer));
@@ -75,14 +87,19 @@ void setup (void) {
 	//8 bit, Odd parity and 1 bit for stop
 	Serial1.begin(115200);
 	
+	WiFi.mode(WIFI_AP);  
+	WiFi.softAP(ssid, password);
+	IPAddress IP = IPAddress (06, 14, 22, 24);
+	IPAddress NMask = IPAddress (255, 255, 255, 0);
+	IPAddress myIP = WiFi.softAPIP();
+	WiFi.softAPConfig(IP, IP, NMask);
+
+	ESP2SOTA.begin(&server);
+	server.begin();
 	
-	//Serial begin on hardware TX and RX for an arduino nano
-	/*if (!CAN.begin(1000E3)) {
-		Serial.println("Starting CAN failed!");
-		//while (1);
-	}*/
 	while (1){
-		uint8_t msg[8] = {0,0,0,0,0,0,0,0};
+		server.handleClient();
+	uint8_t msg[8] = {NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL};
 		_millis=millis();
 		
 		//int parsedPacketSize = CAN.parsePacket();
@@ -105,56 +122,31 @@ void setup (void) {
 				}
 				switch (_id)
 				{
-				case CAN_TCU_MODULUS_1:
+				case CAN_VCU_ID_1:
 					/* code */
 					break;
-				
+				case CAN_VCU_ID_2:
+					mean_battery_temperature = MAP_DECODE_MOTOR_TEMPERATURE(msg);
+					inverter_temperature = MAP_DECODE_INVERTER_TEMPERATURE(msg);
+					break;
+				case CAN_VCU_ID_3:
+					/* code */
+					break;
+				case CAN_VCU_ID_4:
+					inverter_temperature = MAP_DECODE_INVERTER_VOLTAGE(msg);
+					rpm = MAP_DECODE_RPM(msg);
+					break;
 				default:
 					continue;
 				}
-		}
-				/*
-				// only print packet data for non-RTR packets
-				for (int i = 0; i < (int)packetSize; i++){
-					msg[i]=CAN.read();
-				}
-				switch (_id){
-					#ifdef __LART_T24__ 
-						case CAN_VCU_MODULUS_1:
-							power = MAP_CONSUMED_POWER(msg);
-							break;	
-						case CAN_VCU_MODULUS_2:
-							rpm = MAP_RPM(msg);
-							motor_temperature = MAP_MOTOR_TEMPERATURE(msg);
-							inverter_temperature = MAP_INVERTER_TEMPERATURE(msg);
-							break;
-						case CAN_TCU_MODULUS_1:
-							mean_battery_temperature=MAP_PACK_MEAN_TEMPERATURE(msg);
-							break;
-					#endif
-				}
-				
-		}*/
-		
-		
-		motor_temperature ++;
-		if(motor_temperature >100)
-		{
-			motor_temperature = 0;
-		}
-		rpm ++;
-		if(rpm >1000)
-		{
-			rpm = 0;
 		}
 
 		if(_millis-_millis_target>=period){
 			bson.clear(); 
 			bson.append(BSON_RPM, (int32_t)rpm);
-			bson.append(BSON_BATTERYVOLTAGE, (int32_t)rpm); //float 
-			bson.append(BSON_ENGINETEMPERATURE, (int32_t) motor_temperature);
+			bson.append(BSON_LV_BATTERYVOLTAGE, (int32_t)rpm); //float 
+			bson.append(BSON_MOTORTEMPERATURE, (int32_t) motor_temperature);
 			bson.append(BSON_VEHICLESPEED, (int32_t) rpm);
-			
 		#ifdef __LART_T14__
 			bson.append(BSON_AFR, (int32_t)rpm);
 			bson.append(BSON_GEARSHIFT, (int32_t) rpm);
@@ -167,10 +159,11 @@ void setup (void) {
 		#ifdef __LART_T24__
 			bson.append(BSON_SOC, (int32_t)rpm); 
 			bson.append(BSON_BATTERYTEMPERATURE, (int32_t)mean_battery_temperature);
-			bson.append(BSON_INVERTERTEMPERATURE, (int32_t)inverter_temperature); 
+			bson.append(BSON_INVERTERVoltage, (int32_t)inverter_voltage); 
 			bson.append(BSON_POWER, (int32_t)power);//int16_t
 			bson.append(BSON_LAPCOUNT , (int32_t)rpm);//int16_t
 			bson.append(BSON_LAPTIME,(int32_t)_millis);
+			bson.append(BSON_HV_BATTERYVOLTAGE, (int32_t)rpm); //float 
 		#endif
 			
 		
@@ -185,7 +178,4 @@ void setup (void) {
 
 	
 
-		
-void read_TCU_temperature(uint8_t data[8]){
-	mean_battery_temperature = MAP_PACK_MEAN_TEMPERATURE(data);
-}
+
