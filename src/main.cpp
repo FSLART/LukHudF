@@ -8,18 +8,6 @@
 #include <ESP2SOTA.h>*/
 
 
-
-#define PB1_TX_13 9
-#define PB0_RX_12 8
-
-
-
-
-
-
-
-
-
 #define BSON_RPM "rpm"
 #define BSON_VEHICLESPEED "vel"
 #define BSON_MOTORTEMPERATURE "eng_t"
@@ -68,6 +56,22 @@
   #define BSON_BRAKE_LIGHT_OK "brake_light_ok"
   #define BSON_ALC_OK "alc_ok"
   #define BSON_INVERTER_OK "inverter_ok"
+   #define BSON_MAX_CELL_TEMP "max_cell_temp"
+    #define BSON_MIN_CELL_TEMP "min_cell_temp"
+    #define BSON_MIN_VOLTAGE "min_cell_v"
+    #define BSON_MAX_VOLTAGE "max_cell_v"
+
+/*
+	**********************************
+	*******	Valores Calibração *******
+	**********************************
+*/
+#define BSON_ASK_CALIBRATION_VALUES "calib"
+#define BSON_SUSPENSAO_TRASEIRA_L "suspencao_t_l"
+#define BSON_SUSPENSAO_TRASEIRA_R "suspencao_t_r"
+#define BSON_SUSPENSAO_DIANTEIRA_L "suspencao_d_l"
+#define BSON_SUSPENSAO_DIANTEIRA_R "suspencao_d_r"
+
 
  
  // #define SIZE_OF_BSON 128
@@ -122,8 +126,8 @@ void IRAM_ATTR L_BTN2_ISR();
 void IRAM_ATTR R_BTN1_ISR();
 void IRAM_ATTR R_BTN2_ISR();
 
-int R_count1 = 0;
-int R_count2 = 0;
+int ask_software_c_values = 0;
+int btn_calibration_values = 0;
 int L_count1 = 0;
 int L_count2 = 0;
 
@@ -173,6 +177,9 @@ void setup (void) {
 	attachInterrupt(R_BTN_1,R_BTN1_ISR,FALLING);
 	attachInterrupt(R_BTN_2,R_BTN2_ISR,FALLING);
 	
+
+	void read_calibration_values();
+
 
 	timeout = millis();
 	int front_speed = 0,rear_speed = 0;
@@ -330,8 +337,8 @@ void setup (void) {
 			bson.append(BSON_LAPTIME,(int32_t)_millis);
 			
 			//EncodingUnion packet;
-			packet.decodedValue=inverter_voltage;
-			bson.append(BSON_HV_BATTERYVOLTAGE, (int32_t)hv_bat_v); //float 
+			packet.decodedValue=hv_bat_v;
+			bson.append(BSON_HV_BATTERYVOLTAGE, (int32_t)packet.encodedValue); //float 
 			bson.append(BSON_POWER, (int16_t)power); //float
 			bson.append(BSON_LAPCOUNT, (int32_t)R1_menu);
 			bson.append(BSON_MOTORTEMPERATURE,(int32_t)motor_temperature);
@@ -349,8 +356,7 @@ void setup (void) {
 					
 
 			
-			Serial2.write(bsonW);
-			Serial2.write(bson.getBuffer(), bson.getSize());
+			
 			
 			_millis_target=_millis;
 			
@@ -367,39 +373,49 @@ void setup (void) {
 		alc_ok = 0;
 		CAN1.TXpacketBegin(0x254,0);
     	CAN1.TXpacketLoad(power_level);
-    	CAN1.TXpackettransmit();
+    	
 		modules_timeout = millis();
 		digitalWrite(LED3,!digitalRead(LED3));
 	}
 	}
-	
-	
+	if(btn_calibration_values > 0){
+		CAN1.TXpacketLoad(1);
+		btn_calibration_values = 0;
+	}
+	else{
+		CAN1.TXpacketLoad(0);
+	}
+	if(ask_software_c_values){
+		bson.append(BSON_ASK_CALIBRATION_VALUES,true);
+	}
+	else{
+		bson.append(BSON_ASK_CALIBRATION_VALUES,false);
+	}
+
+
+
+	CAN1.TXpackettransmit();
+	Serial2.write(bsonW);
+	Serial2.write(bson.getBuffer(), bson.getSize());
 }
 
 	
 
 
 
-void IRAM_ATTR L_BTN1_ISR()
-{
+void IRAM_ATTR L_BTN1_ISR(){
 	L_count1++;
-	//Serial.println("L_BTN1");
 }
 
-void IRAM_ATTR L_BTN2_ISR()
-{
+void IRAM_ATTR L_BTN2_ISR(){
 	menu++;
-	//Serial.println("L_BTN2");
 }
 
-void IRAM_ATTR R_BTN1_ISR()
-{
-	R_count1++;
-	//Serial.println("L_BTN3");
+void IRAM_ATTR R_BTN1_ISR(){
+	ask_software_c_values++;
 }
 
-void IRAM_ATTR R_BTN2_ISR()
-{
-	R_count2++;
-	//Serial.println("L_BTN4");
+void IRAM_ATTR R_BTN2_ISR(){
+	btn_calibration_values++;
 }
+
