@@ -159,8 +159,17 @@ void setup (void) {
 	short int power = 0;
 	float power_available = 0;
 	float hv_soc = 0, lv_soc = 0;
+	float suspension_b_l = 0;
+	float suspension_b_r = 0;
+	float suspension_f_l = 0;
+	float suspension_f_r = 0;
+
 	uint8_t buffer[SIZE_OF_BSON];
+	uint8_t buffer_calibration[128];
+	uint8_t calib_size[4];
+
 	BSONPP bson(buffer, sizeof(buffer));
+	BSONPP bson_calib(buffer_calibration, sizeof(buffer_calibration));
 	// Setup serial port
 	//8 bit, Odd parity and 1 bit for stop
 
@@ -177,8 +186,6 @@ void setup (void) {
 	attachInterrupt(R_BTN_1,R_BTN1_ISR,FALLING);
 	attachInterrupt(R_BTN_2,R_BTN2_ISR,FALLING);
 	
-
-	void read_calibration_values();
 
 
 	timeout = millis();
@@ -392,11 +399,44 @@ void setup (void) {
 		bson.append(BSON_ASK_CALIBRATION_VALUES,false);
 	}
 
-
+	if(Serial2.available() > 0){
+		bson_calib.clear(); 
+		int32_t size_of_string = 0;
+		int8_t value1;
+		Serial2.read(buffer_calibration,4);
+		if(memcmp(buffer_calibration,"\xFF\xFF\xFF\xFF",4) == 0){
+			Serial2.read(buffer_calibration,sizeof(byte)*8);
+			for(int i = 0; i<4;i++){
+				calib_size[i] = buffer_calibration[i]; 
+				value1= buffer_calibration[i];
+				size_of_string = size_of_string << 8;
+				size_of_string = size_of_string && 0xffffffff;
+			}
+			EncodingUnion packet;
+			Serial2.read(buffer_calibration,size_of_string);
+			if(bson_calib.get(BSON_SUSPENSAO_DIANTEIRA_L, (int32_t *) &(packet.encodedValue)) < 0){
+				suspension_f_l = packet.decodedValue;
+			}
+			if(bson_calib.get(BSON_SUSPENSAO_DIANTEIRA_R, (int32_t *) &(packet.encodedValue)) < 0){
+				suspension_f_r = packet.decodedValue;
+			}
+			if(bson_calib.get(BSON_SUSPENSAO_DIANTEIRA_L, (int32_t *) &(packet.encodedValue)) < 0){
+				suspension_b_l = packet.decodedValue;
+			}
+			if(bson_calib.get(BSON_SUSPENSAO_TRASEIRA_R, (int32_t *) &(packet.encodedValue)) < 0){
+				suspension_b_r = packet.decodedValue;
+			}
+				float suspension_b_l = 0;
+	float suspension_b_r = 0;
+	float suspension_f_l = 0;
+	float suspension_f_r = 0;
+		}
+	}
 
 	CAN1.TXpackettransmit();
 	Serial2.write(bsonW);
 	Serial2.write(bson.getBuffer(), bson.getSize());
+	
 }
 
 	
