@@ -56,11 +56,13 @@
   #define BSON_BRAKE_LIGHT_OK "brake_light_ok"
   #define BSON_ALC_OK "alc_ok"
   #define BSON_INVERTER_OK "inverter_ok"
-   #define BSON_MAX_CELL_TEMP "max_cell_temp"
-    #define BSON_MIN_CELL_TEMP "min_cell_temp"
-    #define BSON_MIN_VOLTAGE "min_cell_v"
-    #define BSON_MAX_VOLTAGE "max_cell_v"
-
+  #define BSON_MAX_CELL_TEMP "max_cell_temp"
+  #define BSON_MIN_CELL_TEMP "min_cell_temp"
+  #define BSON_MIN_VOLTAGE "min_cell_v"
+  #define BSON_MAX_VOLTAGE "max_cell_v"
+  #define BSON_POP_UP_COUNT "pop_up_count"
+  #define BSON_POP_UP_HISTORY "pop_up_hist"
+  #define BSON_POP_UP_ENABLE "pop_up_en"
 /*
 	**********************************
 	*******	Valores Calibração *******
@@ -128,8 +130,10 @@ void IRAM_ATTR R_BTN2_ISR();
 
 int ask_software_c_values = 0;
 int btn_calibration_values = 0;
-int L_count1 = 0;
-int L_count2 = 0;
+int pop_up_visible = 0;
+int pop_up_counter = 0;
+int pop_up_history = 0;
+
 
 
 TWAI_Interface CAN1(1000, 21, 22); // argument 1 - BaudRate,  argument 2 - CAN_TX PIN,  argument 3 - CAN_RX PIN
@@ -163,7 +167,7 @@ void setup (void) {
 	float suspension_b_r = 0;
 	float suspension_f_l = 0;
 	float suspension_f_r = 0;
-
+	uint8_t power_limit = 0;
 	uint8_t buffer[SIZE_OF_BSON];
 	uint8_t buffer_calibration[128];
 	uint8_t calib_size[4];
@@ -175,7 +179,6 @@ void setup (void) {
 
 
 	Serial2.begin(115200);
-	//Serial.begin(115200);
 	Serial.begin(115200);
 
 
@@ -264,7 +267,7 @@ void setup (void) {
 				digitalWrite(LED2,!digitalRead(LED2));
 				
 				if(msg==nullptr){
-					//Serial.println("Error reading CAN packet");
+					//Serial.println("Error reading 
 					continue;
 				}
 				switch (_id)
@@ -281,6 +284,7 @@ void setup (void) {
 					break;
 				case CAN_VCU_ID_3:
 					vcu_ok = MAP_DECODE_VCU_STATE(msg);
+					power_limit = MAP_DECODE_POWER_PLAN(msg);
 					break;
 				case CAN_VCU_ID_4:
 					inverter_voltage = MAP_DECODE_INVERTER_VOLTAGE(msg);
@@ -293,10 +297,12 @@ void setup (void) {
 					rear_speed = MAP_DECODE_WHEEL_SPEED_RL(msg) + MAP_DECODE_WHEEL_SPEED_RR(msg);
 					rear_speed = rear_speed/2;
 					dynamics_r_ok = 1;
+					break;
 				case CAN_DYNAMICS_FRONT_ID_1: //rear_speed
 					front_speed = MAP_DECODE_WHEEL_SPEED_FR(msg) + MAP_DECODE_WHEEL_SPEED_FL(msg);
 					front_speed = front_speed/2;
 					dynamics_f_ok = 1;
+					break;
 				break;
 				case CAN_BRAKE_LIGHT:
 					brake_light_ok = 1;
@@ -349,8 +355,8 @@ void setup (void) {
 			bson.append(BSON_POWER, (int16_t)power); //float
 			bson.append(BSON_LAPCOUNT, (int32_t)R1_menu);
 			bson.append(BSON_MOTORTEMPERATURE,(int32_t)motor_temperature);
-			packet.decodedValue = power_available;
-			bson.append(BSON_POWER_LIMIT,(int)packet.encodedValue);
+			//packet.decodedValue = power_available;
+			bson.append(BSON_POWER_LIMIT,(int)power_limit);
 			bson.append(BSON_VCU_OK,(int32_t)vcu_ok);
 			bson.append(BSON_TCU_OK,(int32_t)tcu_ok);
 			bson.append(BSON_DATALOGGER_OK,(int32_t)datalogger_ok);
@@ -380,18 +386,19 @@ void setup (void) {
 		alc_ok = 0;
 		CAN1.TXpacketBegin(0x254,0);
     	CAN1.TXpacketLoad(power_level);
-    	
-		modules_timeout = millis();
-		digitalWrite(LED3,!digitalRead(LED3));
-	}
-	}
-	if(btn_calibration_values > 0){
+		if(btn_calibration_values > 0){
 		CAN1.TXpacketLoad(1);
 		btn_calibration_values = 0;
-	}
+		}
 	else{
 		CAN1.TXpacketLoad(0);
 	}
+    	CAN1.TXpackettransmit();
+		modules_timeout = millis();
+		digitalWrite(LED3,!digitalRead(LED3));
+	}
+
+
 	if(ask_software_c_values){
 		bson.append(BSON_ASK_CALIBRATION_VALUES,true);
 	}
@@ -408,35 +415,59 @@ void setup (void) {
 			Serial2.read(buffer_calibration,sizeof(byte)*8);
 			for(int i = 0; i<4;i++){
 				calib_size[i] = buffer_calibration[i]; 
-				value1= buffer_calibration[i];
-				size_of_string = size_of_string << 8;
-				size_of_string = size_of_string && 0xffffffff;
+				size_of_string <<= 8;  // Shift left by 8 bits
+				size_of_string |= buffer_calibration[i];  
 			}
 			EncodingUnion packet;
 			Serial2.read(buffer_calibration,size_of_string);
 			if(bson_calib.get(BSON_SUSPENSAO_DIANTEIRA_L, (int32_t *) &(packet.encodedValue)) < 0){
 				suspension_f_l = packet.decodedValue;
 			}
+			else{
+				Serial.println("Failed to get Front Left Suspencion");
+			}
 			if(bson_calib.get(BSON_SUSPENSAO_DIANTEIRA_R, (int32_t *) &(packet.encodedValue)) < 0){
 				suspension_f_r = packet.decodedValue;
 			}
-			if(bson_calib.get(BSON_SUSPENSAO_DIANTEIRA_L, (int32_t *) &(packet.encodedValue)) < 0){
+			else{
+				Serial.println("Failed to get Front Right Suspencion");
+			}
+			if(bson_calib.get(BSON_SUSPENSAO_TRASEIRA_L, (int32_t *) &(packet.encodedValue)) < 0){
 				suspension_b_l = packet.decodedValue;
+			}
+			else{
+				Serial.println("Failed to get Back Left Suspencion");
 			}
 			if(bson_calib.get(BSON_SUSPENSAO_TRASEIRA_R, (int32_t *) &(packet.encodedValue)) < 0){
 				suspension_b_r = packet.decodedValue;
 			}
-				float suspension_b_l = 0;
-	float suspension_b_r = 0;
-	float suspension_f_l = 0;
-	float suspension_f_r = 0;
+			else{
+				Serial.println("Failed to get Back Right Suspencion");
+			}
+			if(bson_calib.get(BSON_POP_UP_COUNT,(int32_t* ) &pop_up_counter)>= 0){
+				Serial.println("Failed to get POP UP count");
+			}
+			else{
+				pop_up_history = pop_up_counter;
+			}
+		float suspension_b_l = 0;
+		float suspension_b_r = 0;
+		float suspension_f_l = 0;
+		float suspension_f_r = 0;
+		if (pop_up_visible != 0){
+			bson.append(BSON_POP_UP_HISTORY,(int32_t) pop_up_history);
+			bson.append(BSON_POP_UP_ENABLE,(int32_t) pop_up_visible);
 		}
 	}
 
-	CAN1.TXpackettransmit();
+
+}
+
+	
 	Serial2.write(bsonW);
 	Serial2.write(bson.getBuffer(), bson.getSize());
 	
+	}
 }
 
 	
@@ -444,7 +475,7 @@ void setup (void) {
 
 
 void IRAM_ATTR L_BTN1_ISR(){
-	L_count1++;
+	pop_up_visible++;
 }
 
 void IRAM_ATTR L_BTN2_ISR(){
@@ -456,6 +487,9 @@ void IRAM_ATTR R_BTN1_ISR(){
 }
 
 void IRAM_ATTR R_BTN2_ISR(){
-	btn_calibration_values++;
+	pop_up_history--;
+	if(pop_up_history < 0){
+		pop_up_history = 0;
+	}
 }
 
