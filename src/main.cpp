@@ -6,6 +6,7 @@
 #include <WiFiAP.h>
 #include <WebServer.h>
 #include <ESP2SOTA.h>*/
+#include <BluetoothSerial.h>
 
 #define BSON_RPM "rpm"
 #define BSON_VEHICLESPEED "vel"
@@ -60,10 +61,11 @@
 #define BSON_POP_UP_COUNT "pop_up_count"
 #define BSON_POP_UP_HISTORY "pop_up_hist"
 #define BSON_POP_UP_ENABLE "pop_up_en"
+#define BSON_APPS "bson_apps"
 /*
- **********************************
+ *************************************
  *******	Valores Calibração *******
- **********************************
+ *************************************
  */
 #define BSON_ASK_CALIBRATION_VALUES "calib"
 #define BSON_SUSPENSAO_TRASEIRA_L "suspencao_t_l"
@@ -72,7 +74,7 @@
 #define BSON_SUSPENSAO_DIANTEIRA_R "suspencao_d_r"
 
 // #define SIZE_OF_BSON 128
-#define SIZE_OF_BSON 1000
+#define SIZE_OF_BSON 200
 
 #endif
 
@@ -111,6 +113,9 @@ int lap_count = 0;
 
 int menu = 0;
 
+
+BluetoothSerial SerialBT;
+
 void loop()
 {
 }
@@ -125,6 +130,8 @@ int btn_calibration_values = 0;
 int pop_up_visible = 0;
 int pop_up_counter = 0;
 int pop_up_history = 0;
+
+
 
 TWAI_Interface CAN1(1000, 21, 22); // argument 1 - BaudRate,  argument 2 - CAN_TX PIN,  argument 3 - CAN_RX PIN
 
@@ -145,9 +152,10 @@ void setup(void)
 	uint16_t motor_temperature = 0;
 	float inverter_temperature = 0;
 	float mean_battery_temperature = 0;
+	int bat_t = 0;
 	float inverter_voltage = 0;
 	float lv_bat_v = 0;
-	float hv_bat_v = 0;
+	short hv_bat_v = 0;
 	short int power = 0;
 	float power_available = 0;
 	float hv_soc = 0, lv_soc = 0;
@@ -167,6 +175,7 @@ void setup(void)
 
 	Serial.begin(115200);
 	Serial2.begin(115200);
+	SerialBT.begin("Steering");
 
 	/***	-Atach interrupts to push buttons-	****/
 	attachInterrupt(L_BTN_1, L_BTN1_ISR, FALLING);
@@ -179,7 +188,6 @@ void setup(void)
 	int front_speed = 0, rear_speed = 0;
 	while (1)
 	{
-
 		
 		uint8_t msg[8] = {NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL};
 		int R1_menu = -1, R2_menu = -1;
@@ -225,35 +233,38 @@ void setup(void)
 		_millis = millis();
 		
 		int _id = CAN1.RXpacketBegin();
-		// int _id= -1;
+		//_id = -1;
+		//int _id= -1;
 		int packetSize = CAN1.RXgetDLC();
-		// int  packetSize = 0;
 
-		if (_id != -1)
+		if (_id > 0)
 		{
-			for (int i = 0; i <= packetSize; i++)
+			for (int i = 0; i < packetSize; i++)
 			{
 				msg[i] = CAN1.RXpacketRead(i);
 			}
 
 			digitalWrite(LED2, !digitalRead(LED2));
-
 			if (msg == nullptr)
 			{
-				// Serial.println("Error reading
 				continue;
 			}
+			Serial.print("ID: ");
+			Serial.println(_id,HEX);
 			switch (_id)
 			{
 			case CAN_VCU_ID_1:
-				apps = MAP_DECODE_APPS(msg);
+				//apps = MAP_DECODE_THROTTLE_POSITION(msg);
 				break;
 			case CAN_VCU_ID_2:
 				motor_temperature = MAP_DECODE_MOTOR_TEMPERATURE(msg);
 				inverter_temperature = MAP_DECODE_INVERTER_TEMPERATURE(msg);
+				Serial.print("M: ");
+				Serial.print(motor_temperature);
+				Serial.print("	I: ");
+				Serial.println(inverter_temperature);
 				hv_soc = MAP_DECODE_HV_SOC(msg);
 				hv_bat_v = MAP_DECODE_HV_VOLTAGE(msg);
-				Serial.println(hv_bat_v);
 				break;
 			case CAN_VCU_ID_3:
 				vcu_ok = MAP_DECODE_VCU_STATE(msg);
@@ -275,7 +286,6 @@ void setup(void)
 				front_speed = MAP_DECODE_WHEEL_SPEED_FR(msg) + MAP_DECODE_WHEEL_SPEED_FL(msg);
 				front_speed = front_speed / 2;
 				dynamics_f_ok = 1;
-				break;
 				break;
 			case CAN_BRAKE_LIGHT:
 				brake_light_ok = 1;
@@ -311,20 +321,31 @@ void setup(void)
 		default:
 			break;
 		}
-			int speed = rear_speed + front_speed;
-			speed = speed/2;
-		
-		
-		
-		
-		
-		
-		
-		
-		
-		
-		
+		//speed = rear_speed + front_speed;
+		//speed = speed/2;
+		/*Serial.print("	RPM: ");
+		Serial.print(rpm);
+		Serial.print("	Speed: ");
+		Serial.print(speed);
+		Serial.print("	Motor Temperature: ");
+		Serial.println(motor_temperature);*/
+
 		speed = rpm * 25 / 1000;
+		/*if(hv_soc <98)
+		{
+			hv_soc++;
+		}
+		else
+		{
+			hv_soc = 1;
+		}*/
+		motor_temperature = 10;
+		hv_soc = 70;
+		/*speed++;
+		if(speed >10){
+			speed = 0;
+		}
+		motor_temperature++;*/
 		
 		R1_menu = 0;
 		if (_millis - _millis_target >= period)
@@ -333,6 +354,7 @@ void setup(void)
 			bson.append(BSON_RPM, (int32_t)rpm);
 			bson.append(BSON_LV_BATTERYVOLTAGE, (int32_t)lv_bat_v); // float
 			bson.append(BSON_MOTORTEMPERATURE, (int32_t)motor_temperature);
+			bson.append(BSON_BATTERYTEMPERATURE,(int32_t)inverter_temperature);
 
 			bson.append(BSON_VEHICLESPEED, (int32_t)speed);
 			//bson.append(BSON_MENU, (int32_t)menu);
@@ -343,7 +365,7 @@ void setup(void)
 			bson.append(BSON_TCSLIP, (int32_t)rpm);
 			bson.append(BSON_TCLAUNCH, (int32_t)rpm);
 			
-				bson.append(BSON_OILTEMPERATURE, (int32_t)rpm); // float
+			bson.append(BSON_OILTEMPERATURE, (int32_t)rpm); // float
 			bson.append(BSON_OILPRESSURE, (int32_t)rpm);		// float
 #endif
 #ifdef __LART_T24__
@@ -359,12 +381,13 @@ void setup(void)
 			//snbson.append(BSON_LAPTIME, (int32_t)_millis);
 
 			// EncodingUnion packet;
-			packet.decodedValue = hv_bat_v;
-			bson.append(BSON_HV_BATTERYVOLTAGE, (int32_t)packet.encodedValue); // float
+			//packet.decodedValue = hv_bat_v;
+			bson.append(BSON_HV_BATTERYVOLTAGE, (short)hv_bat_v); // float
 			// bson.append(BSON_LAPCOUNT, (int32_t)R1_menu);
 			bson.append(BSON_MOTORTEMPERATURE, (int32_t)motor_temperature);
 			// packet.decodedValue = power_available;
 			bson.append(BSON_POWER_LIMIT, (int)power_limit);
+			//bson.append(BSON_APPS,(int32_t)apps);
 			/*bson.append(BSON_VCU_OK,(int32_t)vcu_ok);
 			bson.append(BSON_TCU_OK,(int32_t)tcu_ok);
 			bson.append(BSON_DATALOGGER_OK,(int32_t)datalogger_ok);
@@ -395,7 +418,7 @@ void setup(void)
 
 			Serial2.write(bsonW);
 			Serial2.write(bson.getBuffer(), bson.getSize());
-			motor_temperature = 0;
+			SerialBT.println(speed);
 		}
 		if (millis() >= modules_timeout + modules_period)
 		{
@@ -419,13 +442,13 @@ void setup(void)
 				CAN1.TXpacketLoad(0);
 			}
 			CAN1.TXpackettransmit();
-			Serial.println("sent");
+			//Serial.println("sent");
 			modules_timeout = millis();
 			digitalWrite(LED3, !digitalRead(LED3));
 			modules_timeout = millis();
 		}
 
-
+/*
 		if (Serial2.available() > 0)
 		{
 			bson_calib.clear();
@@ -478,7 +501,8 @@ void setup(void)
 				//float suspension_f_l = 0;
 				//float suspension_f_r = 0;
 			}
-		}
+		}*/
+	
 
 		
 	}
